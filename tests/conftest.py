@@ -64,14 +64,29 @@ def scene() -> tuple[list[str], list, np.ndarray, list]:
     return chans, types, np.concatenate(data, -1), attribs
 
 
-def write_scene(path: str) -> str:
+OVERSCAN_VALUE = 9.0
+
+
+def write_scene(path: str, window: tuple[int, int, int, int] | None = None, extra=()) -> str:
+    """window = data window (x, y, w, h) relative to the 0,0,W,H display window. Pixels outside the display
+    are OVERSCAN_VALUE; a smaller window crops the scene. extra = (name, typedesc, value) header attributes."""
     chans, types, pixels, attribs = scene()
-    spec = oiio.ImageSpec(W, H, len(chans), oiio.FLOAT)
+    x, y, w, h = window or (0, 0, W, H)
+    canvas = np.full((h, w, pixels.shape[2]), OVERSCAN_VALUE, np.float32)
+    sx0, sy0, dx0, dy0 = max(0, x), max(0, y), max(0, -x), max(0, -y)
+    cw, ch = min(W - sx0, w - dx0), min(H - sy0, h - dy0)
+    canvas[dy0:dy0 + ch, dx0:dx0 + cw] = pixels[sy0:sy0 + ch, sx0:sx0 + cw]
+    pixels = canvas
+    spec = oiio.ImageSpec(w, h, len(chans), oiio.FLOAT)
+    spec.x, spec.y = x, y
+    spec.full_x, spec.full_y, spec.full_width, spec.full_height = 0, 0, W, H
     spec.channelnames = tuple(chans)
     spec.channelformats = tuple(types)
     spec.attribute("compression", "zip")
     for k, v in attribs:
         spec.attribute(k, v)
+    for k, t, v in extra:
+        spec.attribute(k, oiio.TypeDesc(t), v)
     out = oiio.ImageOutput.create(path)
     assert out.open(path, spec), oiio.geterror()
     assert out.write_image(np.ascontiguousarray(pixels))

@@ -23,9 +23,8 @@ _DATA_NAMES = {"z", "p", "n", "pw", "pref", "uv"}
 # Header attributes that describe pixel layout; everything else is copied to written files
 _STRUCTURAL = {"channels", "compression", "dataWindow", "displayWindow", "chunkCount", "tiles", "type", "name",
                "version", "lineOrder", "openexr:chunkCount", "openexr:lineOrder", "openexr:dwaCompressionLevel",
-               "openexr:zipCompressionLevel", "Compression", "PixelAspectRatio", "screenWindowCenter",
-               "screenWindowWidth", "tiff:Compression", "planarconfig", "oiio:subimages", "oiio:subimagename",
-               "oiio:BitsPerSample", "oiio:ColorSpace", "smpte:TimeCode"}
+               "openexr:zipCompressionLevel", "Compression", "tiff:Compression", "planarconfig", "oiio:subimages",
+               "oiio:subimagename", "oiio:BitsPerSample", "oiio:ColorSpace", "DateTime"}
 
 # colorInteropID / oiio:ColorSpace values -> colorspace names in OCIO's built-in config
 COLOR_INTEROP = {
@@ -218,8 +217,23 @@ def _crypto_groups(path: str, raw: dict, layers: dict[str, LayerInfo]) -> dict[s
     return groups
 
 
-def read_layers(path: str, layers: list[LayerInfo], header: Header) -> dict[str, np.ndarray]:
-    """Read the given layers of one file as float32 arrays sized to the display window."""
+def output_window(header: Header) -> tuple[int, int, int, int]:
+    """Region to write, relative to the display window: the display window plus any overscan the file had.
+    A data window smaller than the display (auto-cropped renders) grows to the display so edits anywhere survive."""
+    dx, dy, dw, dh = header.data_window
+    x0, y0 = min(0, dx), min(0, dy)
+    return x0, y0, max(header.width, dx + dw) - x0, max(header.height, dy + dh) - y0
+
+
+def has_overscan(header: Header) -> bool:
+    return output_window(header) != (0, 0, header.width, header.height)
+
+
+def read_layers(path: str, layers: list[LayerInfo], header: Header,
+                window: tuple[int, int, int, int] | None = None) -> dict[str, np.ndarray]:
+    """Read the given layers of one file as float32 arrays covering `window` (relative to the display window;
+    default: exactly the display window)."""
+    window = window or (0, 0, header.width, header.height)
     inp = oiio.ImageInput.open(path)
     if not inp:
         raise RuntimeError(f"Cannot open {path}: {oiio.geterror()}")
@@ -234,23 +248,32 @@ def read_layers(path: str, layers: list[LayerInfo], header: Header) -> dict[str,
                 raise RuntimeError(f"Cannot read {li.name} from {path}: {inp.geterror()}")
             arr = np.asarray(arr, dtype=np.float32).reshape(spec.height, spec.width, hi - lo)
             arr = arr[..., [i - lo for i in li.indices]]
-            out[li.name] = _to_display_window(arr, spec, header)
+            out[li.name] = _place(arr, spec.x - header.origin[0], spec.y - header.origin[1], window)
     finally:
         inp.close()
     return out
 
 
-def _to_display_window(arr: np.ndarray, spec, header: Header) -> np.ndarray:
-    if (spec.x, spec.y, spec.width, spec.height) == (header.origin[0], header.origin[1], header.width, header.height):
+def _place(arr: np.ndarray, ax: int, ay: int, window: tuple[int, int, int, int]) -> np.ndarray:
+    """Put pixels whose top-left sits at (ax, ay) onto a canvas covering `window`; outside stays 0."""
+    wx, wy, ww, wh = window
+    if (ax, ay, arr.shape[1], arr.shape[0]) == (wx, wy, ww, wh):
         return arr
-    canvas = np.zeros((header.height, header.width, arr.shape[2]), np.float32)
-    x0, y0 = spec.x - header.origin[0], spec.y - header.origin[1]
+    canvas = np.zeros((wh, ww, arr.shape[2]), np.float32)
+    x0, y0 = ax - wx, ay - wy
     sx0, sy0 = max(0, -x0), max(0, -y0)
     dx0, dy0 = max(0, x0), max(0, y0)
-    w = min(spec.width - sx0, header.width - dx0)
-    h = min(spec.height - sy0, header.height - dy0)
+    w = min(arr.shape[1] - sx0, ww - dx0)
+    h = min(arr.shape[0] - sy0, wh - dy0)
     if w > 0 and h > 0:
         canvas[dy0:dy0 + h, dx0:dx0 + w] = arr[sy0:sy0 + h, sx0:sx0 + w]
+    return canvas
+
+
+def paste_display(canvas: np.ndarray, display: np.ndarray, window: tuple[int, int, int, int]) -> np.ndarray:
+    """Write display-window pixels into a canvas that covers `window`."""
+    x0, y0 = -window[0], -window[1]
+    canvas[y0:y0 + display.shape[0], x0:x0 + display.shape[1]] = display
     return canvas
 
 
@@ -315,8 +338,10 @@ def plan_parts(layers: list[WriteLayer], layout: str, compression: str) -> list[
 
 
 def write_exr(path: str, layers: list[WriteLayer], attribs=None, compression: str = "zip",
-              layout: str = "auto", dwa_level: float = 45.0) -> str:
-    """Write layers as one multi-layer EXR, or multi-part when the layout or compression requires it."""
+              layout: str = "auto", dwa_level: float = 45.0, window: tuple[int, int, int, int] | None = None,
+              display: tuple[int, int, int, int] | None = None) -> str:
+    """Write layers as one multi-layer EXR, or multi-part when the layout or compression requires it.
+    `display` is the display window (x, y, w, h); `window` is where the pixels sit relative to it (overscan)."""
     if not layers:
         raise ValueError("Nothing to write: the stack has no layers.")
     h, w = layers[0].pixels.shape[:2]
@@ -335,6 +360,11 @@ def write_exr(path: str, layers: list[WriteLayer], attribs=None, compression: st
             types += [_typedesc(l.pixel_type)] * len(l.suffixes)
             data.append(l.pixels.reshape(h, w, -1).astype(np.float32))
         spec = oiio.ImageSpec(w, h, len(names), oiio.FLOAT)
+        if display:
+            fx, fy, fw, fh = display
+            wx, wy = (window or (0, 0, w, h))[:2]
+            spec.x, spec.y = fx + wx, fy + wy
+            spec.full_x, spec.full_y, spec.full_width, spec.full_height = fx, fy, fw, fh
         spec.channelnames = tuple(names)
         spec.channelformats = tuple(types)
         _apply_attribs(spec, attribs or [])

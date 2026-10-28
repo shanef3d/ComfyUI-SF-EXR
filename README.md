@@ -6,7 +6,9 @@ Load, edit, mask and save multi-layer EXR files and image sequences in ComfyUI.
 - Point at one frame of a numbered sequence (any format) and the whole sequence loads. `####`, `%04d` and `@` patterns work too.
 - Masks from cryptomatte names, depth bands, world-position regions and normals, or click them in **SF Mask Picker**.
 - OCIO through OpenImageIO's built-in ACES configs; no separate OCIO install.
-- Saves keep the source layout, metadata and frame numbers. Cryptomatte is always written as lossless 32-bit float.
+- Saves keep the source layout, metadata (timecode, pixel aspect), overscan and frame numbers. Cryptomatte is always
+  written as lossless 32-bit float.
+- Long shots run a chunk at a time: set `chunk_size` on SF EXR Load and queue one run per chunk.
 
 ## Install
 

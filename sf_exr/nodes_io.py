@@ -8,7 +8,7 @@ from comfy_api.latest import io
 
 from . import exr_io, layer_ops
 from . import sequence as seq_mod
-from .stack import ExrStack, fit, layer_to_image
+from .stack import ExrStack, fit, frame_layers, layer_to_image, resolve_pixel_type
 
 CATEGORY = "SF EXR"
 ExrType = io.Custom("SF_EXR")
@@ -60,14 +60,6 @@ def file_names(directory: str, name: str, ext: str, frames: list, padding: int) 
     return [os.path.join(directory, f"{name}_{next_counter(directory, name, '.' + ext):05d}.{ext}")]
 
 
-def resolve_pixel_type(mode: str, layer) -> str:
-    if mode == "source":
-        return layer.pixel_type
-    if mode == "auto":
-        return "half" if layer.kind == "color" else "float"
-    return mode
-
-
 def stack_fingerprint(path: str, mode: str) -> str:
     try:
         seq = seq_mod.detect(path, mode)
@@ -94,6 +86,11 @@ class SFExrLoad(io.ComfyNode):
                 io.Int.Input("frame_step", default=1, min=1, max=1000),
                 io.Combo.Input("missing_frames", options=["error", "hold"], default="error"),
                 dynamic_layer(tooltip="Layer for the image output; 'auto' picks the beauty."),
+                # Added in 0.2.0: kept last so workflows saved earlier keep their widget values in place
+                io.Int.Input("chunk_size", default=0, min=0, max=100_000,
+                             tooltip="Frames per run for long sequences; 0 = all frames at once."),
+                io.Int.Input("chunk", default=0, min=0, max=100_000, control_after_generate=io.ControlAfterGenerate.increment,
+                             tooltip="Which chunk this run loads. Queue one run per chunk; it steps forward each run."),
             ],
             outputs=[
                 ExrType.Output(display_name="exr"),
@@ -102,6 +99,7 @@ class SFExrLoad(io.ComfyNode):
                 io.String.Output(display_name="layers"),
                 io.String.Output(display_name="colorspace"),
                 io.Int.Output(display_name="frames"),
+                io.Int.Output(display_name="chunks"),
             ],
         )
 
@@ -110,17 +108,21 @@ class SFExrLoad(io.ComfyNode):
         return True
 
     @classmethod
-    def fingerprint_inputs(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer):
+    def fingerprint_inputs(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer,
+                           chunk_size=0, chunk=0):
         return stack_fingerprint(path, sequence)
 
     @classmethod
-    def execute(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer):
+    def execute(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer,
+                chunk_size=0, chunk=0):
         if not path.strip():
             raise ValueError("Set a path to an EXR or image file.")
-        seq = seq_mod.detect(path, sequence).select(frame_start, frame_end, frame_step, missing_frames)
+        selected = seq_mod.detect(path, sequence).select(frame_start, frame_end, frame_step, missing_frames)
+        seq = selected.chunk(chunk_size, chunk)
         stack = ExrStack.from_sequence(seq)
         image, alpha = layer_to_image(stack.get(stack.resolve(layer)))
-        return io.NodeOutput(stack, image, alpha, "\n".join(stack.layers), stack.header.colorspace, stack.frame_count)
+        return io.NodeOutput(stack, image, alpha, "\n".join(stack.layers), stack.header.colorspace, stack.frame_count,
+                             selected.chunk_count(chunk_size))
 
 
 class SFExrGetLayer(io.ComfyNode):
@@ -262,11 +264,6 @@ class SFExrKeepLayers(io.ComfyNode):
         return io.NodeOutput(layer_ops.apply_ops(exr, [{"type": "keep", "mode": mode, "layers": layers}]))
 
 
-def _write_layers(stack: ExrStack, frame: int, pixel_type: str) -> list[exr_io.WriteLayer]:
-    return [exr_io.WriteLayer(n, l.suffixes, stack.get(n)[frame].numpy(), resolve_pixel_type(pixel_type, l), l.kind)
-            for n, l in stack.layers.items()]
-
-
 class SFExrSave(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -300,8 +297,11 @@ class SFExrSave(io.ComfyNode):
         if layout == "auto" and exr.header.multipart:
             layout = "multi-part"
         paths = file_names(directory, name, "exr", exr.seq.frames, exr.seq.padding or frame_padding)
+        window = exr_io.output_window(exr.header)
+        display = (*exr.header.origin, exr.header.width, exr.header.height)
         for i, path in enumerate(paths):
-            exr_io.write_exr(path, _write_layers(exr, i, pixel_type), exr.header.attribs, comp, layout, dwa_level)
+            exr_io.write_exr(path, frame_layers(exr, i, pixel_type, window), exr.header.attribs, comp, layout,
+                             dwa_level, window, display)
         return io.NodeOutput(paths[0] if len(paths) == 1 else os.path.dirname(paths[0]))
 
 
@@ -342,7 +342,8 @@ class SFExrConvert(io.ComfyNode):
             directory = os.path.join(folder_paths.get_output_directory(), "sf_exr_convert")
         for src in seq.paths:
             hdr = exr_io.read_header(src)
-            data = exr_io.read_layers(src, list(hdr.layers.values()), hdr)
+            window = exr_io.output_window(hdr)
+            data = exr_io.read_layers(src, list(hdr.layers.values()), hdr, window)
             layers = [exr_io.WriteLayer(n, li.suffixes, data[n], resolve_pixel_type(pixel_type, li), li.kind)
                       for n, li in hdr.layers.items()]
             stem, _ = os.path.splitext(os.path.basename(src))
@@ -354,7 +355,8 @@ class SFExrConvert(io.ComfyNode):
             else:
                 out_name = stem + filename_suffix + ".exr"
             lay = "multi-part" if (layout == "auto" and hdr.multipart) else layout
-            exr_io.write_exr(os.path.join(directory, out_name), layers, hdr.attribs, compression, lay, dwa_level)
+            exr_io.write_exr(os.path.join(directory, out_name), layers, hdr.attribs, compression, lay, dwa_level,
+                             window, (*hdr.origin, hdr.width, hdr.height))
         return io.NodeOutput(directory)
 
 

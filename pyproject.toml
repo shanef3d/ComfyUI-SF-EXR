@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-sf-exr"
 description = "Load, edit, mask and save multi-layer EXR and image sequences in ComfyUI: layer picking without running, cryptomatte/depth/position masks with an interactive picker, OCIO, compression and bit-depth conversion."
-version = "0.1.0"
+version = "0.2.0"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = ["OpenImageIO>=3.0"]

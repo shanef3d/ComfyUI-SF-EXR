@@ -49,6 +49,21 @@ class Sequence:
         return Sequence(paths, frames, self.pattern, self.padding, missing)
 
 
+    def chunk(self, size: int, index: int) -> "Sequence":
+        """Frames index*size .. (index+1)*size of this selection; size 0 keeps everything."""
+        if size <= 0:
+            return self
+        count = -(-len(self.paths) // size)
+        if not 0 <= index < count:
+            raise ValueError(f"Chunk {index} is past the end: {len(self.paths)} frames make chunks 0-{count - 1} "
+                             f"of {size}. Reset chunk to 0.")
+        a, b = index * size, (index + 1) * size
+        return Sequence(self.paths[a:b], self.frames[a:b], self.pattern, self.padding, self.missing)
+
+    def chunk_count(self, size: int) -> int:
+        return 1 if size <= 0 else -(-len(self.paths) // size)
+
+
 def _ranges(nums: list[int]) -> str:
     out, i = [], 0
     while i < len(nums):

@@ -1,4 +1,5 @@
 """SF_EXR: every layer of a file or sequence, loaded lazily, plus what's needed to write it back."""
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -17,6 +18,7 @@ class StackLayer:
     kind: str          # color | data | crypto
     pixel_type: str    # half | float | uint
     source: exr_io.LayerInfo | None = None   # set while the layer still comes from the file
+    origin: exr_io.LayerInfo | None = None   # the file layer an edit replaced; its overscan is kept on save
 
 
 class _SourceCache:
@@ -28,13 +30,16 @@ class _SourceCache:
 
     def get(self, info: exr_io.LayerInfo) -> torch.Tensor:
         if info.name not in self.data:
-            frames = []
-            for path in self.seq.paths:
+            def read(path):
                 hdr = exr_io.read_header(path)
                 li = hdr.layers.get(info.name)
                 if li is None:
                     raise ValueError(f"Layer {info.name} is missing from {path}")
-                frames.append(exr_io.read_layers(path, [li], hdr)[info.name])
+                return exr_io.read_layers(path, [li], hdr)[info.name]
+
+            # OpenImageIO releases the GIL while decoding, so frames read in parallel
+            with ThreadPoolExecutor(max_workers=min(8, len(self.seq.paths))) as pool:
+                frames = list(pool.map(read, self.seq.paths))
             shapes = {f.shape for f in frames}
             if len(shapes) > 1:
                 raise ValueError(f"Frames of {self.seq.pattern} have different sizes: {sorted(shapes)}")
@@ -93,7 +98,9 @@ class ExrStack:
 
     def set(self, name: str, pixels: torch.Tensor, suffixes: list[str], kind: str, pixel_type: str) -> "ExrStack":
         out = self.copy()
-        out.layers[name] = StackLayer(name, suffixes, kind, pixel_type, None)
+        prev = self.layers.get(name)
+        origin = (prev.source or prev.origin) if prev else None
+        out.layers[name] = StackLayer(name, suffixes, kind, pixel_type, None, origin)
         out._edits[name] = pixels.float().cpu()
         return out
 
@@ -133,6 +140,47 @@ class ExrStack:
 
     def __repr__(self):
         return f"ExrStack({self.seq.pattern}, {self.frame_count} frame(s), layers={list(self.layers)})"
+
+
+def resolve_pixel_type(mode: str, layer) -> str:
+    if mode == "source":
+        return layer.pixel_type
+    if mode == "auto":
+        return "half" if layer.kind == "color" else "float"
+    return mode
+
+
+def frame_layers(stack: ExrStack, i: int, pixel_type: str, window) -> list[exr_io.WriteLayer]:
+    """Layers of frame i for writing. Unedited layers stream from the source file (never held for the whole
+    sequence); edited ones are pasted over the file's overscan so nothing outside the display window is lost."""
+    path = stack.seq.paths[i]
+    hdr = exr_io.read_header(path)
+    display = (0, 0, stack.header.width, stack.header.height)
+    wanted = {}
+    for l in stack.layers.values():
+        info = l.source or (l.origin if window != display else None)
+        if info is not None:
+            li = hdr.layers.get(info.name)
+            if li is None:
+                raise ValueError(f"Layer {info.name} is missing from {path}")
+            wanted[info.name] = li
+    data = exr_io.read_layers(path, list(wanted.values()), hdr, window) if wanted else {}
+
+    out = []
+    for n, l in stack.layers.items():
+        if l.source is not None:
+            px = data[l.source.name]
+        else:
+            edited = stack.get(n)[i].numpy()
+            if window == display:
+                px = edited
+            else:
+                base = data.get(l.origin.name) if l.origin else None
+                if base is None or base.shape[2] != edited.shape[2]:
+                    base = np.zeros((window[3], window[2], edited.shape[2]), np.float32)
+                px = exr_io.paste_display(base.copy(), edited, window)
+        out.append(exr_io.WriteLayer(n, l.suffixes, px, resolve_pixel_type(pixel_type, l), l.kind))
+    return out
 
 
 def _is_crypto_name(attr: str) -> bool:

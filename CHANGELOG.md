@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- **Shot metadata kept on save:** timecode, pixel aspect ratio and screen window were dropped before; anamorphic
+  plates now stay anamorphic.
+- **Overscan kept:** pixels outside the display window survive Save and Convert, including on edited layers
+  (the edit is pasted over the original overscan). Auto-cropped renders are written at full display size so
+  edits anywhere are kept.
+- **Long sequences:** SF EXR Load has `chunk_size` / `chunk` (steps forward each run) and a `chunks` output, so a
+  shot can be processed a chunk per queued run. Save streams untouched layers from disk instead of holding the
+  whole sequence in memory, and frames load in parallel.
+
 ## 0.1.0
 
 First release.
