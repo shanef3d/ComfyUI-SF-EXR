@@ -9,6 +9,7 @@ on:
     paths: ["pyproject.toml"]
 
 permissions:
+  contents: read   # listing any permission switches the rest off; checkout needs this on private repos
   issues: write
 
 jobs:
