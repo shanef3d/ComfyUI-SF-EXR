@@ -58,6 +58,17 @@ def test_opacity_and_mask_blend_back_to_b():
     assert torch.equal(masked, B) and torch.equal(ma, b)
 
 
+@pytest.mark.parametrize("op,passes_b", [("over", True), ("plus", True), ("under", True), ("xor", True),
+                                         ("multiply", False), ("in", False), ("mask", False)])
+def test_missing_a_is_transparent_black(op, passes_b):
+    """SF Merge feeds zeros for an unconnected A, as Nuke does."""
+    rgb, alpha = merge(torch.zeros_like(B), torch.zeros_like(b), B, b, op)
+    if passes_b:
+        assert torch.equal(rgb, B) and torch.equal(alpha, b)
+    else:
+        assert torch.equal(rgb, torch.zeros_like(B))
+
+
 def test_full_opacity_is_exact():
     A4, B4 = torch.rand(1, 8, 8, 3), torch.rand(1, 8, 8, 3)
     ones = torch.ones(1, 8, 8)

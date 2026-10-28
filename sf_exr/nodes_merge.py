@@ -37,7 +37,8 @@ class SFMerge(io.ComfyNode):
                         "(use Join Image with Alpha); RGB images count as opaque.",
             search_aliases=["merge", "over", "composite", "blend", "comp"],
             inputs=[
-                io.MultiType.Input("A", types=[io.Image, ExrType]),
+                io.MultiType.Input("A", types=[io.Image, ExrType], optional=True,
+                                   tooltip="Unconnected = black and transparent, so 'over' passes B through."),
                 io.MatchType.Input("B", template=b_type),
                 io.Mask.Input("mask", optional=True, tooltip="Limits the merge; outside it B shows through."),
                 io.Combo.Input("operation", options=list(OPERATIONS), default="over"),
@@ -58,10 +59,13 @@ class SFMerge(io.ComfyNode):
         return True
 
     @classmethod
-    def execute(cls, A, B, operation, opacity, bbox, layer, mask=None):
+    def execute(cls, B, operation, opacity, bbox, layer, A=None, mask=None):
         b_rgb, b_a, b_stack, b_name = _rgba(B, layer)
         n, h, w = b_rgb.shape[0], b_rgb.shape[1], b_rgb.shape[2]
-        a_rgb, a_a, _, _ = _rgba(A, layer, n, h, w)
+        if A is None:  # like Nuke: a missing input is black and transparent
+            a_rgb, a_a = torch.zeros_like(b_rgb), torch.zeros_like(b_a)
+        else:
+            a_rgb, a_a, _, _ = _rgba(A, layer, n, h, w)
         m = fit(mask, n, h, w) if mask is not None else None
         rgb, alpha = merge(a_rgb, a_a, b_rgb, b_a, operation, opacity, m)
         full = [(0, 0, w, h)] * n
