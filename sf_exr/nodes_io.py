@@ -89,8 +89,8 @@ class SFExrLoad(io.ComfyNode):
                 # Added in 0.2.0: kept last so workflows saved earlier keep their widget values in place
                 io.Int.Input("chunk_size", default=0, min=0, max=100_000,
                              tooltip="Frames per run for long sequences; 0 = all frames at once."),
-                io.Int.Input("chunk", default=0, min=0, max=100_000, control_after_generate=io.ControlAfterGenerate.increment,
-                             tooltip="Which chunk this run loads. Queue one run per chunk; it steps forward each run."),
+                io.Int.Input("chunk", default=0, min=0, max=100_000, control_after_generate=io.ControlAfterGenerate.fixed,
+                             tooltip="Which chunk this run loads. With chunk_size above 0 it steps forward after each run."),
             ],
             outputs=[
                 ExrType.Output(display_name="exr"),

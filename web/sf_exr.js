@@ -122,6 +122,21 @@ async function refreshNode(node) {
   node.setDirtyCanvas(true, true);
 }
 
+// `chunk` only steps forward after a run while chunking is on. With chunk_size 0 it must stay fixed: a value
+// that changes every run would make the Load node, and every AI model after it, re-run instead of caching.
+function syncChunkStepping(node, sizeChanged) {
+  const size = widget(node, "chunk_size")?.value ?? 0;
+  const chunk = widget(node, "chunk");
+  const control = widget(node, "control_after_generate");
+  if (!chunk || !control) return;
+  if (size <= 0) {
+    control.value = "fixed";
+    chunk.value = 0;
+  } else if (sizeChanged) {
+    control.value = "increment";
+  }
+}
+
 function refreshAll() {
   for (const node of app.graph?._nodes ?? []) {
     if (LAYER_WIDGETS[node.comfyClass] || LAYER_OPS[node.comfyClass] || node.comfyClass === "SFMaskPicker") {
@@ -544,6 +559,10 @@ app.registerExtension({
           const cb = w?.callback;
           if (w) w.callback = (...a) => (cb?.apply(w, a), scheduleRefresh(true));
         }
+        const size = widget(this, "chunk_size");
+        const cb = size?.callback;
+        if (size) size.callback = (...a) => (cb?.apply(size, a), syncChunkStepping(this, true));
+        syncChunkStepping(this, false);
       }
       if (LAYER_OPS[cls]) {
         for (const w of this.widgets ?? []) {
@@ -587,6 +606,7 @@ app.registerExtension({
     const onConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function () {
       const r = onConfigure?.apply(this, arguments);
+      if (cls === LOAD) syncChunkStepping(this, false);
       if (this.sfPicker) this.sfPicker.renderRules();
       scheduleRefresh(false);
       return r;
