@@ -183,6 +183,17 @@ def frame_layers(stack: ExrStack, i: int, pixel_type: str, window) -> list[exr_i
     return out
 
 
+def frame_bboxes(stack: ExrStack, w: int | None = None, h: int | None = None) -> list[tuple[int, int, int, int]]:
+    """Each frame's data window as (x0, y0, x1, y1) in display-window pixels, scaled to w x h if given."""
+    sx = (w or stack.header.width) / stack.header.width
+    sy = (h or stack.header.height) / stack.header.height
+    boxes = []
+    for path in stack.seq.paths:
+        dx, dy, dw, dh = exr_io.read_header(path).data_window
+        boxes.append((round(dx * sx), round(dy * sy), round((dx + dw) * sx), round((dy + dh) * sy)))
+    return boxes
+
+
 def _is_crypto_name(attr: str) -> bool:
     return attr.startswith("cryptomatte/") and attr.endswith("/name")
 

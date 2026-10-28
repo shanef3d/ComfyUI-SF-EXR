@@ -2,6 +2,10 @@
 
 ## 0.2.0
 
+- **SF Merge:** Nuke-style merge with 22 operations (over, under, plus, minus, from, multiply, screen, overlay,
+  hard-light, max, min, average, difference, divide, hypot, in, out, atop, xor, mask, stencil, copy), an opacity
+  slider, a mask, and "set bbox to" (union / intersection / A / B). A and B can each be an EXR or an image; the
+  output takes B's type, and with an EXR only the chosen layer changes.
 - **Shot metadata kept on save:** timecode, pixel aspect ratio and screen window were dropped before; anamorphic
   plates now stay anamorphic.
 - **Overscan kept:** pixels outside the display window survive Save and Convert, including on edited layers

@@ -33,6 +33,7 @@ An example workflow is in `example_workflows/` and appears in ComfyUI's Template
 | SF EXR Set Layer | Replace or add a layer from IMAGE/MASK |
 | SF EXR Rename Layers | Strip prefixes, find/replace, or `old = new` lines (layers and channels); cryptomatte metadata follows |
 | SF EXR Keep/Remove Layers | Keep or drop layers by name or wildcard |
+| SF Merge | Nuke-style merge of A onto B (over, plus, multiply, screen, in, out, …) with opacity, mask and "set bbox to"; works on EXR layers or images, output matches B |
 | SF EXR Save | EXR → multi-layer or multi-part file |
 | SF EXR Convert | Re-write EXRs with new compression, bit depth or layout, file to file |
 | SF Image Save | PNG / TIFF / JPG / DPX / single-layer EXR at a chosen bit depth |

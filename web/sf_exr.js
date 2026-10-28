@@ -14,8 +14,9 @@ const LAYER_WIDGETS = {
   SFMaskFromPosition: ["layer", "data"],
   SFMaskFromNormal: ["layer", "data"],
   SFMaskFromCryptomatte: ["cryptomatte", "crypto"],
+  SFMerge: ["layer", "all"],
 };
-const UPSTREAM = { exr: true, context: true };
+const UPSTREAM = { exr: true, context: true, B: true, A: true };
 // Nodes between a Load and its users that change layer names; the routes replay them so dropdowns match
 const LAYER_OPS = {
   SFExrRenameLayers: (n) => ({
