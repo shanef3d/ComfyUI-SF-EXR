@@ -1,0 +1,22 @@
+name: Publish to Comfy Registry
+
+# Bump `version` in pyproject.toml and push to main to release. Needs the REGISTRY_ACCESS_TOKEN repo secret
+# (an API key from registry.comfy.org) and [tool.comfy] PublisherId set in pyproject.toml.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["pyproject.toml"]
+
+permissions:
+  issues: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'shanef3d' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Comfy-Org/publish-node-action@v1
+        with:
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}

@@ -1,0 +1,27 @@
+[project]
+name = "comfyui-sf-exr"
+description = "Load, edit, mask and save multi-layer EXR and image sequences in ComfyUI: layer picking without running, cryptomatte/depth/position masks with an interactive picker, OCIO, compression and bit-depth conversion."
+version = "0.1.0"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = ["OpenImageIO>=3.0"]
+keywords = ["comfyui", "exr", "openexr", "cryptomatte", "ocio", "aces", "vfx", "compositing", "multilayer"]
+
+[project.urls]
+Repository = "https://github.com/shanef3d/ComfyUI-SF-EXR"
+"Bug Tracker" = "https://github.com/shanef3d/ComfyUI-SF-EXR/issues"
+
+[tool.comfy]
+PublisherId = ""   # your publisher id from registry.comfy.org
+DisplayName = "SF EXR"
+Icon = ""
+includes = []
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+# E741: `l` is the house name for a layer; E501: node descriptions are long strings; B905: zipped lists are equal by construction
+ignore = ["B008", "E741", "E501", "B905"]

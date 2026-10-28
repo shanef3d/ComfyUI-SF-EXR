@@ -1,0 +1,845 @@
+{
+ "id": "77dddf46-43c0-4b45-bd35-ee340c684bb9",
+ "revision": 0,
+ "last_node_id": 9,
+ "last_link_id": 9,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "SFExrLoad",
+   "pos": [
+    40,
+    120
+   ],
+   "size": [
+    270,
+    302
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "path",
+     "name": "path",
+     "type": "STRING",
+     "widget": {
+      "name": "path"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sequence",
+     "name": "sequence",
+     "type": "COMBO",
+     "widget": {
+      "name": "sequence"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "frame_start",
+     "name": "frame_start",
+     "type": "INT",
+     "widget": {
+      "name": "frame_start"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "frame_end",
+     "name": "frame_end",
+     "type": "INT",
+     "widget": {
+      "name": "frame_end"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "frame_step",
+     "name": "frame_step",
+     "type": "INT",
+     "widget": {
+      "name": "frame_step"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "missing_frames",
+     "name": "missing_frames",
+     "type": "COMBO",
+     "widget": {
+      "name": "missing_frames"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "layer",
+     "name": "layer",
+     "type": "COMBO",
+     "widget": {
+      "name": "layer"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "exr",
+     "name": "exr",
+     "type": "SF_EXR",
+     "links": [
+      1,
+      2
+     ]
+    },
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "links": null
+    },
+    {
+     "localized_name": "alpha",
+     "name": "alpha",
+     "type": "MASK",
+     "links": null
+    },
+    {
+     "localized_name": "layers",
+     "name": "layers",
+     "type": "STRING",
+     "links": null
+    },
+    {
+     "localized_name": "colorspace",
+     "name": "colorspace",
+     "type": "STRING",
+     "links": null
+    },
+    {
+     "localized_name": "frames",
+     "name": "frames",
+     "type": "INT",
+     "links": null
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SFExrLoad"
+   },
+   "widgets_values": [
+    "",
+    "auto",
+    0,
+    0,
+    1,
+    "error",
+    "auto"
+   ],
+   "widgets_values_named": {
+    "path": "",
+    "sequence": "auto",
+    "frame_start": 0,
+    "frame_end": 0,
+    "frame_step": 1,
+    "missing_frames": "error",
+    "layer": "auto"
+   }
+  },
+  {
+   "id": 2,
+   "type": "SFMaskPicker",
+   "pos": [
+    400,
+    380
+   ],
+   "size": [
+    420,
+    640
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "exr",
+     "name": "exr",
+     "type": "SF_EXR",
+     "link": 1
+    },
+    {
+     "localized_name": "rules",
+     "name": "rules",
+     "type": "STRING",
+     "widget": {
+      "name": "rules"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "invert",
+     "name": "invert",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "invert"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "mask",
+     "name": "mask",
+     "type": "MASK",
+     "links": [
+      6
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SFMaskPicker"
+   },
+   "widgets_values": [
+    "{\n \"rules\": [\n  {\n   \"type\": \"crypto\",\n   \"layer\": \"ViewLayer.CryptoMaterial\",\n   \"names\": [\n    \"head\"\n   ],\n   \"op\": \"add\"\n  }\n ]\n}",
+    false,
+    ""
+   ],
+   "widgets_values_named": {
+    "rules": "{\n \"rules\": [\n  {\n   \"type\": \"crypto\",\n   \"layer\": \"ViewLayer.CryptoMaterial\",\n   \"names\": [\n    \"head\"\n   ],\n   \"op\": \"add\"\n  }\n ]\n}",
+    "invert": false,
+    "picker": ""
+   }
+  },
+  {
+   "id": 3,
+   "type": "SFPrepareForModel",
+   "pos": [
+    400,
+    100
+   ],
+   "size": [
+    270,
+    170
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "exr",
+     "name": "exr",
+     "type": "SF_EXR",
+     "link": 2
+    },
+    {
+     "localized_name": "layer",
+     "name": "layer",
+     "type": "COMBO",
+     "widget": {
+      "name": "layer"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "source_space",
+     "name": "source_space",
+     "type": "COMBO",
+     "widget": {
+      "name": "source_space"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "encoding",
+     "name": "encoding",
+     "type": "COMBO",
+     "widget": {
+      "name": "encoding"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "exposure",
+     "name": "exposure",
+     "type": "FLOAT",
+     "widget": {
+      "name": "exposure"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      3
+     ]
+    },
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "SF_EXR_MODEL_CONTEXT",
+     "links": [
+      4
+     ]
+    },
+    {
+     "localized_name": "alpha",
+     "name": "alpha",
+     "type": "MASK",
+     "links": null
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SFPrepareForModel"
+   },
+   "widgets_values": [
+    "auto",
+    "auto (from file)",
+    "sRGB (ACES SDR view)",
+    0
+   ],
+   "widgets_values_named": {
+    "layer": "auto",
+    "source_space": "auto (from file)",
+    "encoding": "sRGB (ACES SDR view)",
+    "exposure": 0
+   }
+  },
+  {
+   "id": 4,
+   "type": "ImageInvert",
+   "pos": [
+    880,
+    100
+   ],
+   "size": [
+    169.1265625,
+    26
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 3
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      5
+     ]
+    }
+   ],
+   "properties": {
+    "cnr_id": "comfy-core",
+    "ver": "0.43.0",
+    "Node name for S&R": "ImageInvert"
+   }
+  },
+  {
+   "id": 5,
+   "type": "Note",
+   "pos": [
+    880,
+    200
+   ],
+   "size": [
+    260,
+    130
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "properties": {},
+   "widgets_values": [
+    "Replace Image Invert with your edit model (inpaint / image edit). Feed it the image from SF Prepare for Model, and optionally the mask from SF Mask Picker."
+   ],
+   "widgets_values_named": {
+    "text": "Replace Image Invert with your edit model (inpaint / image edit). Feed it the image from SF Prepare for Model, and optionally the mask from SF Mask Picker."
+   },
+   "color": "#432",
+   "bgcolor": "#653"
+  },
+  {
+   "id": 6,
+   "type": "SFReturnFromModel",
+   "pos": [
+    1180,
+    100
+   ],
+   "size": [
+    184.589453125,
+    66
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "SF_EXR_MODEL_CONTEXT",
+     "link": 4
+    },
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 5
+    },
+    {
+     "localized_name": "mask",
+     "name": "mask",
+     "shape": 7,
+     "type": "MASK",
+     "link": 6
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "exr",
+     "name": "exr",
+     "type": "SF_EXR",
+     "links": [
+      7
+     ]
+    },
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      8
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SFReturnFromModel"
+   }
+  },
+  {
+   "id": 7,
+   "type": "SFExrSave",
+   "pos": [
+    1500,
+    60
+   ],
+   "size": [
+    270,
+    202
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "exr",
+     "name": "exr",
+     "type": "SF_EXR",
+     "link": 7
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "output_folder",
+     "name": "output_folder",
+     "type": "STRING",
+     "widget": {
+      "name": "output_folder"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "layout",
+     "name": "layout",
+     "type": "COMBO",
+     "widget": {
+      "name": "layout"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "compression",
+     "name": "compression",
+     "type": "COMBO",
+     "widget": {
+      "name": "compression"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "dwa_level",
+     "name": "dwa_level",
+     "type": "FLOAT",
+     "widget": {
+      "name": "dwa_level"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "pixel_type",
+     "name": "pixel_type",
+     "type": "COMBO",
+     "widget": {
+      "name": "pixel_type"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "frame_padding",
+     "name": "frame_padding",
+     "type": "INT",
+     "widget": {
+      "name": "frame_padding"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "path",
+     "name": "path",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SFExrSave"
+   },
+   "widgets_values": [
+    "sf_exr/edit",
+    "",
+    "auto",
+    "zip",
+    45,
+    "source",
+    4
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "sf_exr/edit",
+    "output_folder": "",
+    "layout": "auto",
+    "compression": "zip",
+    "dwa_level": 45,
+    "pixel_type": "source",
+    "frame_padding": 4
+   }
+  },
+  {
+   "id": 8,
+   "type": "SFOcioDisplay",
+   "pos": [
+    1500,
+    400
+   ],
+   "size": [
+    270,
+    178
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 8
+    },
+    {
+     "localized_name": "from_space",
+     "name": "from_space",
+     "type": "COMBO",
+     "widget": {
+      "name": "from_space"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "display",
+     "name": "display",
+     "type": "COMBO",
+     "widget": {
+      "name": "display"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "view",
+     "name": "view",
+     "type": "COMBO",
+     "widget": {
+      "name": "view"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "inverse",
+     "name": "inverse",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "inverse"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "config",
+     "name": "config",
+     "type": "COMBO",
+     "widget": {
+      "name": "config"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "custom_config",
+     "name": "custom_config",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "custom_config"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      9
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SFOcioDisplay"
+   },
+   "widgets_values": [
+    "Linear Rec.709 (sRGB)",
+    "sRGB - Display",
+    "ACES 2.0 - SDR 100 nits (Rec.709)",
+    false,
+    "ACES CG (built-in)",
+    ""
+   ],
+   "widgets_values_named": {
+    "from_space": "Linear Rec.709 (sRGB)",
+    "display": "sRGB - Display",
+    "view": "ACES 2.0 - SDR 100 nits (Rec.709)",
+    "inverse": false,
+    "config": "ACES CG (built-in)",
+    "custom_config": ""
+   }
+  },
+  {
+   "id": 9,
+   "type": "SFImageSave",
+   "pos": [
+    1860,
+    400
+   ],
+   "size": [
+    270,
+    198
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "images",
+     "name": "images",
+     "type": "IMAGE",
+     "link": 9
+    },
+    {
+     "localized_name": "alpha",
+     "name": "alpha",
+     "shape": 7,
+     "type": "MASK",
+     "link": null
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "output_folder",
+     "name": "output_folder",
+     "type": "STRING",
+     "widget": {
+      "name": "output_folder"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "format",
+     "name": "format",
+     "type": "COMBO",
+     "widget": {
+      "name": "format"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "dither",
+     "name": "dither",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "dither"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "quality",
+     "name": "quality",
+     "type": "INT",
+     "widget": {
+      "name": "quality"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "start_frame",
+     "name": "start_frame",
+     "type": "INT",
+     "widget": {
+      "name": "start_frame"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [],
+   "properties": {
+    "Node name for S&R": "SFImageSave"
+   },
+   "widgets_values": [
+    "sf_exr/edit_review",
+    "",
+    "png 8-bit",
+    true,
+    95,
+    1
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "sf_exr/edit_review",
+    "output_folder": "",
+    "format": "png 8-bit",
+    "dither": true,
+    "quality": 95,
+    "start_frame": 1
+   }
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   2,
+   0,
+   "SF_EXR"
+  ],
+  [
+   2,
+   1,
+   0,
+   3,
+   0,
+   "SF_EXR"
+  ],
+  [
+   3,
+   3,
+   0,
+   4,
+   0,
+   "IMAGE"
+  ],
+  [
+   4,
+   3,
+   1,
+   6,
+   0,
+   "SF_EXR_MODEL_CONTEXT"
+  ],
+  [
+   5,
+   4,
+   0,
+   6,
+   1,
+   "IMAGE"
+  ],
+  [
+   6,
+   2,
+   0,
+   6,
+   2,
+   "MASK"
+  ],
+  [
+   7,
+   6,
+   0,
+   7,
+   0,
+   "SF_EXR"
+  ],
+  [
+   8,
+   6,
+   1,
+   8,
+   0,
+   "IMAGE"
+  ],
+  [
+   9,
+   8,
+   0,
+   9,
+   0,
+   "IMAGE"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {
+  "ds": {
+   "scale": 0.9,
+   "offset": [
+    -300,
+    170
+   ]
+  }
+ },
+ "version": 0.4
+}

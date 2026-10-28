@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Render files and outputs never belong in the repo (client work, large binaries)
+*.exr
+*.dpx
+!tests/data/*.exr
+output/
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
