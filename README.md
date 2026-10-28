@@ -8,7 +8,6 @@ Load, edit, mask and save multi-layer EXR files and image sequences in ComfyUI.
 - OCIO through OpenImageIO's built-in ACES configs; no separate OCIO install.
 - Saves keep the source layout, metadata (timecode, pixel aspect), overscan and frame numbers. Cryptomatte is always
   written as lossless 32-bit float.
-- Long shots run a chunk at a time: set `chunk_size` on SF EXR Load and queue one run per chunk.
 
 ## Install
 

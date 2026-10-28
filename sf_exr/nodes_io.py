@@ -86,11 +86,6 @@ class SFExrLoad(io.ComfyNode):
                 io.Int.Input("frame_step", default=1, min=1, max=1000),
                 io.Combo.Input("missing_frames", options=["error", "hold"], default="error"),
                 dynamic_layer(tooltip="Layer for the image output; 'auto' picks the beauty."),
-                # Added in 0.2.0: kept last so workflows saved earlier keep their widget values in place
-                io.Int.Input("chunk_size", default=0, min=0, max=100_000,
-                             tooltip="Frames per run for long sequences; 0 = all frames at once."),
-                io.Int.Input("chunk", default=0, min=0, max=100_000, control_after_generate=io.ControlAfterGenerate.fixed,
-                             tooltip="Which chunk this run loads. With chunk_size above 0 it steps forward after each run."),
             ],
             outputs=[
                 ExrType.Output(display_name="exr"),
@@ -99,7 +94,6 @@ class SFExrLoad(io.ComfyNode):
                 io.String.Output(display_name="layers"),
                 io.String.Output(display_name="colorspace"),
                 io.Int.Output(display_name="frames"),
-                io.Int.Output(display_name="chunks"),
             ],
         )
 
@@ -108,21 +102,17 @@ class SFExrLoad(io.ComfyNode):
         return True
 
     @classmethod
-    def fingerprint_inputs(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer,
-                           chunk_size=0, chunk=0):
+    def fingerprint_inputs(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer):
         return stack_fingerprint(path, sequence)
 
     @classmethod
-    def execute(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer,
-                chunk_size=0, chunk=0):
+    def execute(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer):
         if not path.strip():
             raise ValueError("Set a path to an EXR or image file.")
-        selected = seq_mod.detect(path, sequence).select(frame_start, frame_end, frame_step, missing_frames)
-        seq = selected.chunk(chunk_size, chunk)
+        seq = seq_mod.detect(path, sequence).select(frame_start, frame_end, frame_step, missing_frames)
         stack = ExrStack.from_sequence(seq)
         image, alpha = layer_to_image(stack.get(stack.resolve(layer)))
-        return io.NodeOutput(stack, image, alpha, "\n".join(stack.layers), stack.header.colorspace, stack.frame_count,
-                             selected.chunk_count(chunk_size))
+        return io.NodeOutput(stack, image, alpha, "\n".join(stack.layers), stack.header.colorspace, stack.frame_count)
 
 
 class SFExrGetLayer(io.ComfyNode):
