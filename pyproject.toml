@@ -12,7 +12,7 @@ Repository = "https://github.com/shanef3d/ComfyUI-SF-EXR"
 "Bug Tracker" = "https://github.com/shanef3d/ComfyUI-SF-EXR/issues"
 
 [tool.comfy]
-PublisherId = ""   # your publisher id from registry.comfy.org
+PublisherId = "shanef3d"
 DisplayName = "SF EXR"
 Icon = ""
 includes = []
