@@ -3,10 +3,8 @@ import torch
 from comfy_api.latest import io
 
 from . import color
-from .nodes_io import CATEGORY, ExrType, dynamic_layer
+from .nodes_io import CATEGORY, RAW_ENCODING, ExrType, ModelContextType, dynamic_layer
 from .stack import fit, layer_to_image
-
-ModelContextType = io.Custom("SF_EXR_MODEL_CONTEXT")
 
 _SPACES = color.colorspaces()
 _DISPLAYS = color.displays()
@@ -82,15 +80,17 @@ class SFOcioDisplay(io.ComfyNode):
         return io.NodeOutput(out if inverse else out.clamp(0.0, 1.0))
 
 
-class SFPrepareForModel(io.ComfyNode):
+class SFExrToImage(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return io.Schema(
+            # node_id predates the rename; kept so saved workflows still load.
             node_id="SFPrepareForModel",
-            display_name="SF Prepare for Model",
+            display_name="SF EXR to Image",
             category=CATEGORY,
             description="Turn a scene-linear layer into the 0-1 image a diffusion model expects. Pair with "
-                        "SF Return from Model to put the result back into the EXR.",
+                        "SF Image to EXR to put the result back into the EXR.",
+            search_aliases=["prepare for model", "exr to image", "linear to srgb"],
             inputs=[
                 ExrType.Input("exr"),
                 dynamic_layer(tooltip="'auto' is the beauty."),
@@ -123,15 +123,17 @@ class SFPrepareForModel(io.ComfyNode):
         return io.NodeOutput(image, ctx, alpha)
 
 
-class SFReturnFromModel(io.ComfyNode):
+class SFImageToExr(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         return io.Schema(
+            # node_id predates the rename; kept so saved workflows still load.
             node_id="SFReturnFromModel",
-            display_name="SF Return from Model",
+            display_name="SF Image to EXR",
             category=CATEGORY,
             description="Convert a model's output back to scene-linear, resize it to the plate, and composite it "
                         "into the original layer through the mask. Pixels outside the mask keep their original values.",
+            search_aliases=["return from model", "image to exr", "srgb to linear"],
             inputs=[
                 ModelContextType.Input("context"),
                 io.Image.Input("image"),
@@ -149,7 +151,10 @@ class SFReturnFromModel(io.ComfyNode):
         orig = stack.get(name)
         n, h, w = orig.shape[0], orig.shape[1], orig.shape[2]
         edited = fit(image[..., :3], n, h, w)
-        linear = color.from_model(edited, context["space"], context["encoding"], context["exposure"])
+        if context["encoding"] == RAW_ENCODING:  # context from SF EXR Load: the edit is already scene-linear
+            linear = edited
+        else:
+            linear = color.from_model(edited, context["space"], context["encoding"], context["exposure"])
         m = fit(mask, n, h, w).unsqueeze(-1).clamp(0.0, 1.0) if mask is not None else torch.ones_like(linear[..., :1])
 
         data = orig.clone()
@@ -163,4 +168,4 @@ class SFReturnFromModel(io.ComfyNode):
         return io.NodeOutput(out, layer_to_image(data)[0])
 
 
-NODES = [SFOcioTransform, SFOcioDisplay, SFPrepareForModel, SFReturnFromModel]
+NODES = [SFOcioTransform, SFOcioDisplay, SFExrToImage, SFImageToExr]

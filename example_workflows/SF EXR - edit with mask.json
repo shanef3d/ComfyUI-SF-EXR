@@ -38,20 +38,11 @@
      "link": null
     },
     {
-     "localized_name": "frame_start",
-     "name": "frame_start",
-     "type": "INT",
+     "localized_name": "frames",
+     "name": "frames",
+     "type": "STRING",
      "widget": {
-      "name": "frame_start"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "frame_end",
-     "name": "frame_end",
-     "type": "INT",
-     "widget": {
-      "name": "frame_end"
+      "name": "frames"
      },
      "link": null
     },
@@ -94,8 +85,8 @@
      ]
     },
     {
-     "localized_name": "image",
-     "name": "image",
+     "localized_name": "selected layer",
+     "name": "selected layer",
      "type": "IMAGE",
      "links": null
     },
@@ -106,22 +97,10 @@
      "links": null
     },
     {
-     "localized_name": "layers",
-     "name": "layers",
-     "type": "STRING",
-     "links": null
-    },
-    {
-     "localized_name": "colorspace",
-     "name": "colorspace",
-     "type": "STRING",
-     "links": null
-    },
-    {
-     "localized_name": "frames",
-     "name": "frames",
-     "type": "INT",
-     "links": null
+     "name": "context",
+     "localized_name": "context",
+     "type": "SF_EXR_MODEL_CONTEXT",
+     "links": []
     }
    ],
    "properties": {
@@ -130,8 +109,7 @@
    "widgets_values": [
     "",
     "auto",
-    0,
-    0,
+    "",
     1,
     "error",
     "auto"
@@ -139,8 +117,7 @@
    "widgets_values_named": {
     "path": "",
     "sequence": "auto",
-    "frame_start": 0,
-    "frame_end": 0,
+    "frames": "",
     "frame_step": 1,
     "missing_frames": "error",
     "layer": "auto"
@@ -364,10 +341,10 @@
    "outputs": [],
    "properties": {},
    "widgets_values": [
-    "Replace Image Invert with your edit model (inpaint / image edit). Feed it the image from SF Prepare for Model, and optionally the mask from SF Mask Picker."
+    "Replace Image Invert with your edit model (inpaint / image edit). Feed it the image from SF EXR to Image, and optionally the mask from SF Mask Picker."
    ],
    "widgets_values_named": {
-    "text": "Replace Image Invert with your edit model (inpaint / image edit). Feed it the image from SF Prepare for Model, and optionally the mask from SF Mask Picker."
+    "text": "Replace Image Invert with your edit model (inpaint / image edit). Feed it the image from SF EXR to Image, and optionally the mask from SF Mask Picker."
    },
    "color": "#432",
    "bgcolor": "#653"

@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+- **SF EXR Resize:** the options of Resize Image/Mask (dimensions with crop, multiplier, longer/shorter side,
+  width, height, megapixels, match size, multiple of N) applied to every layer the way it needs. Color layers use
+  the chosen filter in float, so HDR values are never clipped (unlike core's lanczos, which goes through 8-bit);
+  bilinear and bicubic antialias when shrinking. Depth, position and normal passes take exact source values
+  (optional: filter them like color). Pixel motion vectors scale with the picture. Cryptomatte coverage is summed
+  per ID and re-ranked, so mattes match an area-scaled matte exactly and IDs are never blended. Stretching updates
+  the pixel aspect ratio; overscan is dropped.
+- **SF EXR Load outputs:** `image` is now **selected layer**; `layers`, `colorspace` and `frame_count` are replaced by
+  a **context** output. Saved workflows that used the old outputs get an SF EXR Info node inserted, with their
+  links moved onto it.
+- **SF EXR Info:** from any context (SF EXR Load or SF EXR to Image): frame count, first and last frame, width,
+  height, layer, layers, colorspace, and an `info` summary to show with Preview as Text.
+- **SF Image to EXR takes SF EXR Load's context too:** an edited copy of the selected layer (already scene-linear)
+  goes back into the EXR without any color conversion.
+- **SF EXR to Preprocessor:** render passes as ControlNet-style control images, exact instead of estimated from the
+  beauty. Depth (near = white, inverse or linear, one near/far for the whole shot so sequences don't flicker, or per
+  frame, or manual), normals (camera space; world-space passes converted with the file's worldToCamera matrix;
+  left-handed cameras detected), and edges (cryptomatte object boundaries, or depth jumps when there's no
+  cryptomatte).
+- **Renamed:** SF Prepare for Model is now **SF EXR to Image**, and SF Return from Model is now **SF Image to EXR**.
+  Saved workflows still load; search finds the old names too.
+- **Frame lists on SF EXR Load:** `frame_start` / `frame_end` are replaced by one `frames` field (empty = all,
+  `1001-1100`, `0`, `15, 20`, `1-10, 50-60`, `first-1050`, `1001-last`); `frame_step` stays. Frame 0 can now be
+  picked on its own. Saved workflows are converted when opened. The `frames` count output is now `frame_count`.
+- **Pre-roll frames:** negative frame numbers (`shot.-010.exr`, printf-style padding) are part of the sequence.
+  A hyphen that is part of the name (`shot-0010.exr`) still reads as frame 10.
+- **Hold** now reuses the nearest earlier frame on disk, which also covers stepped and listed frames.
+- **Browse on SF EXR Load:** a file browser for the ComfyUI machine's folders, with sequences collapsed to one line
+  (pattern, range, count, missing frames), recent folders and shortcuts. Files are read in place. Dropping a single
+  image on the node copies it into `input/sf_exr/` for quick tests.
+- **Mask Picker timeline:** for sequences, a frame slider over the frames SF EXR Load will run, with missing frames
+  marked; ← / → over the preview step a frame (Shift: 10). The frame shown is saved with the node but never sent
+  with the prompt.
+- **SF EXR Load layout:** `sequence`, `frame_step` and `missing_frames` move to the advanced section; the `frames`
+  label shows the shot's range.
+- **Automatic refresh:** headers and previews are re-read when you return to the ComfyUI tab (previews redraw only
+  if the files changed), and right-click → Reload files does it by hand.
+- **Shared servers:** when ComfyUI is started with `--listen`, SF EXR only reads, browses and writes inside ComfyUI's
+  input / output / temp folders and the folders in `SF_EXR_ROOTS`. This also covers the preview routes, which
+  previously read any path they were sent.
+- **A lone numbered frame keeps its number:** loading only `shot.0050.exr` now saves as frame 50 instead of the
+  next counter.
+
 ## 0.2.0
 
 - **SF Merge:** Nuke-style merge with 22 operations (over, under, plus, minus, from, multiply, screen, overlay,

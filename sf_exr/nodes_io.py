@@ -6,12 +6,21 @@ import OpenImageIO as oiio
 import torch
 from comfy_api.latest import io
 
-from . import exr_io, layer_ops
+from . import exr_io, layer_ops, resize
 from . import sequence as seq_mod
 from .stack import ExrStack, fit, frame_layers, layer_to_image, resolve_pixel_type
 
 CATEGORY = "SF EXR"
 ExrType = io.Custom("SF_EXR")
+# The hand-off between an image and its place in the EXR: which layer, its colorspace and how it was encoded.
+# SF EXR to Image makes one for model-ready pixels, SF EXR Load for the layer as stored.
+ModelContextType = io.Custom("SF_EXR_MODEL_CONTEXT")
+RAW_ENCODING = "as stored"
+
+
+def raw_context(stack: ExrStack, layer: str) -> dict:
+    return {"stack": stack, "layer": layer, "space": stack.header.colorspace or "Linear Rec.709 (sRGB)",
+            "encoding": RAW_ENCODING, "exposure": 0.0}
 
 SEQUENCE_MODES = ["auto", "single"]
 LAYOUTS = ["auto", "single-part", "multi-part"]
@@ -80,20 +89,23 @@ class SFExrLoad(io.ComfyNode):
             search_aliases=["exr", "openexr", "multilayer", "image sequence", "load exr"],
             inputs=[
                 io.String.Input("path", default="", tooltip="Absolute path, or relative to ComfyUI's input folder."),
-                io.Combo.Input("sequence", options=SEQUENCE_MODES, default="auto"),
-                io.Int.Input("frame_start", default=0, min=0, max=10_000_000, tooltip="0 = first frame"),
-                io.Int.Input("frame_end", default=0, min=0, max=10_000_000, tooltip="0 = last frame"),
-                io.Int.Input("frame_step", default=1, min=1, max=1000),
-                io.Combo.Input("missing_frames", options=["error", "hold"], default="error"),
+                io.Combo.Input("sequence", options=SEQUENCE_MODES, default="auto", advanced=True),
+                io.String.Input("frames", default="", placeholder="all",
+                                tooltip="Empty = all frames. Frames and ranges separated by commas: "
+                                        "1001-1100, 0, 15, 20, first-1050, 1001-last. Negative numbers are pre-roll."),
+                io.Int.Input("frame_step", default=1, min=1, max=1000, tooltip="Every Nth frame of each range.",
+                             advanced=True),
+                io.Combo.Input("missing_frames", options=["error", "hold"], default="error", advanced=True),
                 dynamic_layer(tooltip="Layer for the image output; 'auto' picks the beauty."),
             ],
             outputs=[
                 ExrType.Output(display_name="exr"),
-                io.Image.Output(display_name="image"),
+                io.Image.Output(display_name="selected layer",
+                                tooltip="The chosen layer as stored: scene-linear, unclamped."),
                 io.Mask.Output(display_name="alpha"),
-                io.String.Output(display_name="layers"),
-                io.String.Output(display_name="colorspace"),
-                io.Int.Output(display_name="frames"),
+                ModelContextType.Output(display_name="context",
+                                        tooltip="For SF EXR Info, or SF Image to EXR to put an edited copy of the "
+                                                "selected layer back."),
             ],
         )
 
@@ -102,17 +114,158 @@ class SFExrLoad(io.ComfyNode):
         return True
 
     @classmethod
-    def fingerprint_inputs(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer):
+    def fingerprint_inputs(cls, path, sequence, frames, frame_step, missing_frames, layer):
         return stack_fingerprint(path, sequence)
 
     @classmethod
-    def execute(cls, path, sequence, frame_start, frame_end, frame_step, missing_frames, layer):
+    def execute(cls, path, sequence, frames, frame_step, missing_frames, layer):
         if not path.strip():
             raise ValueError("Set a path to an EXR or image file.")
-        seq = seq_mod.detect(path, sequence).select(frame_start, frame_end, frame_step, missing_frames)
+        seq = seq_mod.detect(path, sequence).select(frames, frame_step, missing_frames)
         stack = ExrStack.from_sequence(seq)
-        image, alpha = layer_to_image(stack.get(stack.resolve(layer)))
-        return io.NodeOutput(stack, image, alpha, "\n".join(stack.layers), stack.header.colorspace, stack.frame_count)
+        name = stack.resolve(layer)
+        image, alpha = layer_to_image(stack.get(name))
+        return io.NodeOutput(stack, image, alpha, raw_context(stack, name))
+
+
+def info_text(stack: ExrStack, layer: str, space: str) -> str:
+    """SF EXR Info's readable summary."""
+    frames = [f for f in stack.seq.frames if f is not None]
+    if frames:
+        span = f"{frames[0]}–{frames[-1]} · {stack.frame_count} frames"
+        if stack.seq.missing:
+            span += f" · {len(stack.seq.missing)} missing"
+    else:
+        span = "single image"
+    h, w = stack.size
+    return "\n".join([
+        f"File        {os.path.basename(stack.seq.pattern)}",
+        f"Frames      {span}",
+        f"Size        {w} × {h}",
+        f"Colorspace  {space or 'unknown'}",
+        f"Layer       {layer}",
+        f"Layers      {len(stack.layers)}: {', '.join(stack.layers)}",
+    ])
+
+
+class SFExrInfo(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="SFExrInfo",
+            display_name="SF EXR Info",
+            category=CATEGORY,
+            description="The file, frame range, size, colorspace and layers behind a context, as outputs. 'info' is "
+                        "a readable summary; connect it to Preview as Text to see it.",
+            search_aliases=["exr info", "frame count", "frame range", "resolution", "layers", "metadata"],
+            inputs=[ModelContextType.Input("context")],
+            outputs=[
+                io.Int.Output(display_name="frame_count"),
+                io.Int.Output(display_name="first_frame", tooltip="0 for a single image."),
+                io.Int.Output(display_name="last_frame", tooltip="0 for a single image."),
+                io.Int.Output(display_name="width"),
+                io.Int.Output(display_name="height"),
+                io.String.Output(display_name="layer"),
+                io.String.Output(display_name="layers", tooltip="One layer name per line."),
+                io.String.Output(display_name="colorspace"),
+                io.String.Output(display_name="info"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, context):
+        stack, layer, space = context["stack"], context["layer"], context.get("space", "")
+        frames = [f for f in stack.seq.frames if f is not None]
+        h, w = stack.size
+        return io.NodeOutput(stack.frame_count, frames[0] if frames else 0, frames[-1] if frames else 0, w, h,
+                             layer, "\n".join(stack.layers), space, info_text(stack, layer, space))
+
+
+MAX_SIZE = 16384
+
+
+class SFExrResize(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        def crop():
+            return io.Combo.Input("crop", options=["disabled", "center"], default="center",
+                                  tooltip="How to handle aspect ratio mismatch: 'disabled' stretches to fit (and "
+                                          "sets the pixel aspect ratio), 'center' crops to keep the aspect.")
+        return io.Schema(
+            node_id="SFExrResize",
+            display_name="SF EXR Resize",
+            category=CATEGORY,
+            description="Resize every layer of an EXR, each the way its contents need: color layers with the chosen "
+                        "filter in full float (HDR is never clipped), depth / position / normal passes without "
+                        "blending values across edges, motion vectors rescaled, and cryptomatte re-ranked so the "
+                        "mattes keep working. Same options as Resize Image/Mask.",
+            search_aliases=["resize", "scale", "exr resize", "downres", "proxy", "half res", "change size"],
+            inputs=[
+                ExrType.Input("exr"),
+                io.DynamicCombo.Input("resize_type", options=[
+                    io.DynamicCombo.Option("scale dimensions", [
+                        io.Int.Input("width", default=1920, min=0, max=MAX_SIZE,
+                                     tooltip="Target width in pixels. 0 = from height, keeping the aspect ratio."),
+                        io.Int.Input("height", default=1080, min=0, max=MAX_SIZE,
+                                     tooltip="Target height in pixels. 0 = from width, keeping the aspect ratio."),
+                        crop(),
+                    ]),
+                    io.DynamicCombo.Option("scale by multiplier", [
+                        io.Float.Input("multiplier", default=0.5, min=0.01, max=8.0, step=0.01,
+                                       tooltip="Scale factor (2.0 doubles the size, 0.5 halves it)."),
+                    ]),
+                    io.DynamicCombo.Option("scale longer dimension", [
+                        io.Int.Input("longer_size", default=1024, min=1, max=MAX_SIZE),
+                    ]),
+                    io.DynamicCombo.Option("scale shorter dimension", [
+                        io.Int.Input("shorter_size", default=1024, min=1, max=MAX_SIZE),
+                    ]),
+                    io.DynamicCombo.Option("scale width", [
+                        io.Int.Input("width", default=1920, min=1, max=MAX_SIZE),
+                    ]),
+                    io.DynamicCombo.Option("scale height", [
+                        io.Int.Input("height", default=1080, min=1, max=MAX_SIZE),
+                    ]),
+                    io.DynamicCombo.Option("scale total pixels", [
+                        io.Float.Input("megapixels", default=1.0, min=0.01, max=64.0, step=0.01,
+                                       tooltip="Target total megapixels (1.0 ≈ 1024×1024). Aspect ratio is kept."),
+                    ]),
+                    io.DynamicCombo.Option("match size", [
+                        io.MultiType.Input("match", [io.Image, io.Mask, ExrType],
+                                           tooltip="Resize to the size of this image, mask or EXR."),
+                        crop(),
+                    ]),
+                    io.DynamicCombo.Option("scale to multiple", [
+                        io.Int.Input("multiple", default=8, min=1, max=MAX_SIZE,
+                                     tooltip="Width and height become divisible by this (e.g. 8, 16 or 64 for "
+                                             "latents); the excess is cropped from the center."),
+                    ]),
+                ], tooltip="How to resize: exact dimensions, a scale factor, matching another image, etc."),
+                io.Combo.Input("scale_method", options=resize.METHODS, default="area",
+                               tooltip="Filter for color layers. 'area' is best for shrinking, 'lanczos' for "
+                                       "enlarging. Cryptomatte always keeps exact IDs."),
+                io.Combo.Input("data_layers", options=resize.DATA_MODES, default=resize.DATA_MODES[0],
+                               advanced=True,
+                               tooltip="Depth, position and normal passes. 'nearest' copies real values so edges "
+                                       "never get in-between depths; 'same as color' filters them like color."),
+            ],
+            outputs=[ExrType.Output(display_name="exr")],
+        )
+
+    @classmethod
+    def execute(cls, exr: ExrStack, resize_type: dict, scale_method: str, data_layers: str = resize.DATA_MODES[0]):
+        h, w = exr.size
+        match = resize_type.get("match")
+        if isinstance(match, ExrStack):
+            match_size = (match.size[1], match.size[0])
+        elif match is not None:
+            match_size = (int(match.shape[2]), int(match.shape[1]))
+        else:
+            match_size = None
+        tw, th, center = resize.target(w, h, resize_type, match_size)
+        if (tw, th) == (w, h) and not center:
+            return io.NodeOutput(exr)
+        return io.NodeOutput(resize.resize_stack(exr, tw, th, center, scale_method, data_layers))
 
 
 class SFExrGetLayer(io.ComfyNode):
@@ -422,5 +575,5 @@ def _preview_ui(paths: list[str]) -> dict | None:
     return {"images": images}
 
 
-NODES = [SFExrLoad, SFExrGetLayer, SFExrSetLayer, SFExrRenameLayers, SFExrKeepLayers, SFExrSave, SFExrConvert,
+NODES = [SFExrLoad, SFExrInfo, SFExrResize, SFExrGetLayer, SFExrSetLayer, SFExrRenameLayers, SFExrKeepLayers, SFExrSave, SFExrConvert,
          SFImageSave]

@@ -2,7 +2,7 @@
 from comfy_api.latest import ComfyExtension, io
 from typing_extensions import override
 
-from .sf_exr import nodes_color, nodes_io, nodes_mask, nodes_merge
+from .sf_exr import nodes_color, nodes_io, nodes_mask, nodes_merge, nodes_preprocess
 
 WEB_DIRECTORY = "./web"
 
@@ -10,7 +10,7 @@ WEB_DIRECTORY = "./web"
 class SFExrExtension(ComfyExtension):
     @override
     async def get_node_list(self) -> list[type[io.ComfyNode]]:
-        return nodes_io.NODES + nodes_color.NODES + nodes_mask.NODES + nodes_merge.NODES
+        return nodes_io.NODES + nodes_color.NODES + nodes_mask.NODES + nodes_merge.NODES + nodes_preprocess.NODES
 
 
 async def comfy_entrypoint() -> SFExrExtension:

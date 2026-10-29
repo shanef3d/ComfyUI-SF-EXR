@@ -10,7 +10,7 @@ import numpy as np
 from aiohttp import web
 from PIL import Image
 
-from . import color, exr_io, layer_ops, masks
+from . import access, color, exr_io, layer_ops, masks, upload
 from . import sequence as seq_mod
 from .nodes_mask import crypto_group, crypto_ranks, evaluate
 from .stack import ExrStack, layer_to_image, pick_layer
@@ -19,11 +19,11 @@ log = logging.getLogger("SF EXR")
 _stacks: "OrderedDict[tuple, ExrStack]" = OrderedDict()
 
 
-def _frame_stack(path: str, mode: str, frame: int) -> ExrStack:
+def _frame_stack(path: str, mode: str, frame: int | None) -> ExrStack:
+    """One frame of a file or sequence; None is the first frame, a missing frame shows the one held for it."""
     seq = seq_mod.detect(path, mode)
     if seq.is_sequence and seq.frames[0] is not None:
-        f = frame if frame in seq.frames else seq.frames[0]
-        seq = seq.select(f, f, 1, "hold")
+        seq = seq.take([seq.frames[0] if frame is None else frame], "hold")
     key = (seq.paths[0], tuple(os.path.getmtime(p) for p in seq.paths))
     if key not in _stacks:
         _stacks[key] = ExrStack.from_sequence(seq)
@@ -73,8 +73,25 @@ def _source(src) -> ExrStack:
     ops = src.get("ops") or []
     if isinstance(ops, str):
         ops = _ops(ops)
-    st = _frame_stack(src.get("path", ""), src.get("sequence", "auto"), int(src.get("frame", 0) or 0))
+    frame = src.get("frame")
+    st = _frame_stack(src.get("path", ""), src.get("sequence", "auto"), None if frame in (None, "") else int(frame))
     return layer_ops.apply_ops(st, ops)
+
+
+def _places() -> list[dict]:
+    """Shortcuts for the browse dialog: ComfyUI's folders, SF_EXR_ROOTS, and (local-only ComfyUI) the drives."""
+    out = [{"name": n, "path": p} for n, p in access.comfy_roots() if n != "Temp"]
+    out += [{"name": os.path.basename(r.rstrip("\\/")) or r, "path": r} for r in access.configured_roots()]
+    if access.local_only():
+        if hasattr(os, "listdrives"):
+            drives = os.listdrives()
+        elif os.name == "nt":
+            drives = [f"{c}:\\" for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"{c}:\\")]
+        else:
+            drives = ["/"]
+        out += [{"name": d.rstrip("\\"), "path": d} for d in drives]
+        out.append({"name": "Home", "path": os.path.expanduser("~")})
+    return out
 
 
 def _error(e: Exception, status: int = 200):
@@ -93,7 +110,19 @@ def register(routes):
                 info.update(path=seq.paths[0], pattern=seq.pattern, frames=len(seq.paths),
                             first=seq.frames[0], last=seq.frames[-1], missing=seq.missing[:200],
                             roles={r: pick_layer(list(hdr.layers.values()), r)
-                                   for r in ("beauty", "depth", "position", "normal")})
+                                   for r in ("beauty", "depth", "position", "normal")},
+                            # changes when files are re-rendered, so the browser knows to redraw
+                            stamp=f"{len(seq.paths)}:{os.path.getmtime(seq.paths[0])}:{os.path.getmtime(seq.paths[-1])}")
+                if seq.frames[0] is not None:
+                    # The frames SF EXR Load will run (its frames list and step), for the picker's timeline
+                    try:
+                        sel = seq_mod.parse_frames(q.get("frames", ""), seq.frames[0], seq.frames[-1],
+                                                   int(q.get("step", 1) or 1))
+                        on_disk = set(seq.frames)
+                        info.update(selection=sel[:20_000], selection_missing=[f for f in sel[:20_000]
+                                                                               if f not in on_disk])
+                    except ValueError as e:
+                        info["selection_error"] = str(e)
                 return layer_ops.apply_to_info(info, _ops(q.get("ops")))
             return web.json_response(await asyncio.to_thread(work))
         except Exception as e:
@@ -103,6 +132,8 @@ def register(routes):
     async def colorspaces(request):
         q = request.rel_url.query
         try:
+            if q.get("custom", "").strip():
+                access.check(q["custom"].strip().strip('"'))
             cfg = color.config_path(q.get("config", "ACES CG (built-in)"), q.get("custom", ""))
             return web.json_response({"spaces": color.colorspaces(cfg), "displays": color.displays(cfg),
                                       "views": color.views(cfg)})
@@ -187,6 +218,47 @@ def register(routes):
                     m = 1.0 - m
                 return _png(m.numpy(), int(body.get("size", 768)))
             return web.Response(body=await asyncio.to_thread(work), content_type="image/png")
+        except Exception as e:
+            return _error(e, 400)
+
+    @routes.get("/sf_exr/browse")
+    async def browse(request):
+        """A folder on the server, sequences collapsed, for the browse dialog. Files are read where they are."""
+        q = request.rel_url.query
+        try:
+            def work():
+                import folder_paths
+                listing = seq_mod.list_dir(q.get("dir") or folder_paths.get_input_directory())
+                listing["places"] = _places()
+                return listing
+            return web.json_response(await asyncio.to_thread(work))
+        except Exception as e:
+            return _error(e)
+
+    @routes.post("/sf_exr/upload")
+    async def upload_file(request):
+        """One file per request into input/sf_exr/<folder>/, name unchanged. reset=1 (the first file of a drop)
+        first clears that folder, so a drop replaces the previous upload instead of adding to it."""
+        try:
+            import folder_paths
+            q = request.rel_url.query
+            folder, name = upload.folder_for(folder_paths.get_input_directory(), q.get("folder", ""))
+            if q.get("reset") == "1":
+                await asyncio.to_thread(upload.clear, folder)
+            reader = await request.multipart()
+            field = await reader.next()
+            while field is not None and field.name != "file":
+                field = await reader.next()
+            if field is None or not field.filename:
+                return _error(ValueError("No file in the upload."), 400)
+            dest = upload.file_in(folder, field.filename)
+            os.makedirs(folder, exist_ok=True)
+            part = dest + ".part"
+            with open(part, "wb") as f:
+                while chunk := await field.read_chunk(1 << 20):
+                    f.write(chunk)
+            os.replace(part, dest)
+            return web.json_response({"path": f"{upload.ROOT}/{name}/{os.path.basename(dest)}"})
         except Exception as e:
             return _error(e, 400)
 
