@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Crop to mask:** SF EXR to Image has a `crop mask` input and a `crop` option. "crop to mask" sends only the
+  masked region (plus `padding`) to the model at `megapixels` with sides a `multiple` of 16, using one crop for the
+  whole sequence; a new `crop mask` output matches the cropped image for inpainting. SF Image to EXR scales the
+  result back and pastes it into the crop, through the mask. When SF Image to EXR has no crop mask of its own it now
+  uses SF EXR to Image's (before, it replaced the whole layer).
+- **Clearer mask names:** SF Image to EXR's `mask` input is labelled `crop mask`, and SF EXR Get Layer's `mask`
+  output is `alpha` (it is the layer's alpha). Labels only; saved workflows keep their connections.
+- **Save metadata:** SF EXR Save writes the ComfyUI prompt, workflow and a readable summary (models, seeds, prompt
+  text) into the EXR header as `comfyui/*` attributes. On by default; ComfyUI's `--disable-metadata` turns it off.
+  Off also strips ComfyUI metadata inherited from the source file.
 - **SF EXR Resize:** the options of Resize Image/Mask (dimensions with crop, multiplier, longer/shorter side,
   width, height, megapixels, match size, multiple of N) applied to every layer the way it needs. Color layers use
   the chosen filter in float, so HDR values are never clipped (unlike core's lanczos, which goes through 8-bit);

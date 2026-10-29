@@ -54,13 +54,13 @@ set SF_EXR_ROOTS=Z:\shows;\\nas\renders
 | SF EXR Rename Layers | Strip prefixes, find/replace, or `old = new` lines (layers and channels); cryptomatte metadata follows |
 | SF EXR Keep/Remove Layers | Keep or drop layers by name or wildcard |
 | SF Merge | Nuke-style merge of A onto B (over, plus, multiply, screen, in, out, …) with opacity, mask and "set bbox to"; works on EXR layers or images, output matches B |
-| SF EXR Save | EXR → multi-layer or multi-part file |
+| SF EXR Save | EXR → multi-layer or multi-part file; **save metadata** writes the ComfyUI prompt, workflow and a summary (models, seeds, prompt text) into the header |
 | SF EXR Convert | Re-write EXRs with new compression, bit depth or layout, file to file |
 | SF Image Save | PNG / TIFF / JPG / DPX / single-layer EXR at a chosen bit depth |
 | SF OCIO Transform | Colorspace conversion (presets for common ACES moves) |
 | SF OCIO Display | Display/view transform, or its inverse |
-| SF EXR to Image | Scene-linear layer → 0–1 image for a diffusion model |
-| SF Image to EXR | Model output → scene-linear, composited into the layer through a mask |
+| SF EXR to Image | Scene-linear layer → 0–1 image for a diffusion model; **crop to mask** sends only the masked region at the model's size |
+| SF Image to EXR | Model output → scene-linear, pasted back (into the crop it came from) and composited through the mask |
 | SF EXR to Preprocessor | Render pass → control image: depth (near = white, one range for the whole shot), camera-space normals, or edges from cryptomatte boundaries / depth jumps |
 | SF Mask from Cryptomatte | Names or wildcards from the manifest → MASK |
 | SF Mask from Depth | Near/far band with falloff |
@@ -71,12 +71,15 @@ set SF_EXR_ROOTS=Z:\shows;\\nas\renders
 ## Typical edit
 
 ```
-SF EXR Load → SF EXR to Image → (edit model) → SF Image to EXR → SF EXR Save
-               SF Mask Picker ───────── mask ──────┘
+SF EXR Load → SF EXR to Image ── image + crop mask → (inpaint / edit model) → SF Image to EXR → SF EXR Save
+                    ↑ crop mask
+              SF Mask Picker
 ```
 
-SF Image to EXR resizes the edit to the plate, converts it back to scene-linear and composites it through the
-mask, so pixels outside the mask keep their original HDR values. Other passes (depth, cryptomatte) pass through
+Set SF EXR to Image's crop to **crop to mask** so the model works on just the masked region at about 1 MP (with
+`padding` pixels of context), instead of shrinking a 4K plate. Its `crop mask` output matches the cropped image
+for inpainting; `alpha` is always the layer's own alpha channel. SF Image to EXR resizes the edit back to the crop, converts it to scene-linear and composites it
+through the mask, so pixels outside the mask keep their original HDR values. Other passes (depth, cryptomatte) pass through
 unchanged; they still describe the original render where the edit changed shapes.
 
 ## Compression rules

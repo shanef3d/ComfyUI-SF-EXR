@@ -6,7 +6,7 @@ import OpenImageIO as oiio
 import torch
 from comfy_api.latest import io
 
-from . import exr_io, layer_ops, resize
+from . import exr_io, layer_ops, provenance, resize
 from . import sequence as seq_mod
 from .stack import ExrStack, fit, frame_layers, layer_to_image, resolve_pixel_type
 
@@ -277,7 +277,8 @@ class SFExrGetLayer(io.ComfyNode):
             category=CATEGORY,
             description="Take one layer out of the EXR as IMAGE and MASK. Values stay as stored (scene-linear, unclamped).",
             inputs=[ExrType.Input("exr"), dynamic_layer()],
-            outputs=[io.Image.Output(display_name="image"), io.Mask.Output(display_name="mask"),
+            outputs=[io.Image.Output(display_name="image"),
+                     io.Mask.Output(display_name="alpha", tooltip="The layer's alpha, or its only channel."),
                      io.String.Output(display_name="name")],
         )
 
@@ -427,12 +428,21 @@ class SFExrSave(io.ComfyNode):
                 io.Combo.Input("pixel_type", options=PIXEL_TYPES, default="source",
                                tooltip="auto = half for color layers, float for data."),
                 io.Int.Input("frame_padding", default=4, min=1, max=10, advanced=True),
+                io.Boolean.Input("save_metadata", default=True, display_name="save metadata",
+                                 tooltip="Write the ComfyUI prompt, workflow and a summary (models, seeds, prompt "
+                                         "text) into the EXR header, so each frame can be traced and re-made. Off "
+                                         "also removes any ComfyUI metadata the source file carried."),
             ],
             outputs=[io.String.Output(display_name="path")],
+            hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo],
         )
 
     @classmethod
-    def execute(cls, exr, filename_prefix, output_folder, layout, compression, dwa_level, pixel_type, frame_padding):
+    def execute(cls, exr, filename_prefix, output_folder, layout, compression, dwa_level, pixel_type, frame_padding,
+                save_metadata=True):
+        attribs = provenance.strip(exr.header.attribs)
+        if save_metadata and not _metadata_disabled():
+            attribs += provenance.attribs(cls.hidden.prompt, cls.hidden.extra_pnginfo)
         directory, name = output_dir(filename_prefix, output_folder)
         comp = exr.header.compression if compression == "source" else compression
         if comp not in exr_io.COMPRESSIONS:
@@ -443,9 +453,18 @@ class SFExrSave(io.ComfyNode):
         window = exr_io.output_window(exr.header)
         display = (*exr.header.origin, exr.header.width, exr.header.height)
         for i, path in enumerate(paths):
-            exr_io.write_exr(path, frame_layers(exr, i, pixel_type, window), exr.header.attribs, comp, layout,
+            exr_io.write_exr(path, frame_layers(exr, i, pixel_type, window), attribs, comp, layout,
                              dwa_level, window, display)
         return io.NodeOutput(paths[0] if len(paths) == 1 else os.path.dirname(paths[0]))
+
+
+def _metadata_disabled() -> bool:
+    """ComfyUI's --disable-metadata switch wins over the node toggle, as it does for core's Save Image."""
+    try:
+        from comfy.cli_args import args
+        return bool(args.disable_metadata)
+    except Exception:
+        return False
 
 
 class SFExrConvert(io.ComfyNode):
