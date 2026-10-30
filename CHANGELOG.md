@@ -7,6 +7,8 @@
   whole sequence; a new `crop mask` output matches the cropped image for inpainting. SF Image to EXR scales the
   result back and pastes it into the crop, through the mask. When SF Image to EXR has no crop mask of its own it now
   uses SF EXR to Image's (before, it replaced the whole layer).
+- **SF Merge sockets in A, B, mask order** (B used to come first). Saved workflows keep A and B connected to the
+  right sockets.
 - **Clearer mask names:** SF Image to EXR's `mask` input is labelled `crop mask`, and SF EXR Get Layer's `mask`
   output is `alpha` (it is the layer's alpha). Labels only; saved workflows keep their connections.
 - **Save metadata:** SF EXR Save writes the ComfyUI prompt, workflow and a readable summary (models, seeds, prompt

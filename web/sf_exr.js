@@ -1036,10 +1036,35 @@ function migrateLoadOutputs(node, graph) {
   }
 }
 
+// SF Merge's sockets went from B, A, mask (B was required, and ComfyUI lists required inputs first) to A, B, mask.
+// Put saved input slots in the new order by name and move links with them, so A stays A and B stays B.
+const MERGE_ORDER = ["operation", "opacity", "bbox", "layer", "A", "B", "mask"];
+
+function reorderInputs(node, graph, order) {
+  const inputs = node.inputs;
+  if (!inputs?.length) return;
+  const rank = (name) => {
+    const i = order.indexOf(name);
+    return i < 0 ? order.length : i;
+  };
+  const sorted = inputs.map((inp, i) => [inp, i]).sort((a, b) => rank(a[0].name) - rank(b[0].name) || a[1] - b[1]);
+  if (sorted.every(([, i], j) => i === j)) return;
+  const newSlot = new Map(sorted.map(([, oldIndex], newIndex) => [oldIndex, newIndex]));
+  node.inputs = sorted.map(([inp]) => inp);
+  for (const l of graph.links ?? []) {
+    if (linkField(l, "target_id", 3) !== node.id) continue;
+    const slot = newSlot.get(linkField(l, "target_slot", 4));
+    if (slot === undefined) continue;
+    if (Array.isArray(l)) l[LINK_INDEX.target_slot] = slot;
+    else l.target_slot = slot;
+  }
+}
+
 function migrateWorkflow(graphData) {
   const graphs = [graphData, ...(graphData?.definitions?.subgraphs ?? [])];
   for (const g of graphs) {
     for (const n of [...(g?.nodes ?? [])]) {
+      if (n.type === "SFMerge") reorderInputs(n, g, MERGE_ORDER);
       if (n.type !== LOAD) continue;
       migrateLoadNode(n, g);
       migrateLoadOutputs(n, g);

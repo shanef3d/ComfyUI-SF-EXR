@@ -36,10 +36,13 @@ class SFMerge(io.ComfyNode):
                         "Colour is treated as premultiplied by its alpha. Images bring alpha as a 4th channel "
                         "(use Join Image with Alpha); RGB images count as opaque.",
             search_aliases=["merge", "over", "composite", "blend", "comp"],
+            # ComfyUI draws required sockets before optional ones, so B is optional too (checked in execute) to keep
+            # the sockets in A, B, mask order.
             inputs=[
                 io.MultiType.Input("A", types=[io.Image, ExrType], optional=True,
                                    tooltip="Unconnected = black and transparent, so 'over' passes B through."),
-                io.MatchType.Input("B", template=b_type),
+                io.MatchType.Input("B", template=b_type, optional=True,
+                                   tooltip="The background. Required; the output is the same type as B."),
                 io.Mask.Input("mask", optional=True, tooltip="Limits the merge; outside it B shows through."),
                 io.Combo.Input("operation", options=list(OPERATIONS), default="over"),
                 io.Float.Input("opacity", default=1.0, min=0.0, max=1.0, step=0.01, display_mode=io.NumberDisplay.slider),
@@ -59,7 +62,9 @@ class SFMerge(io.ComfyNode):
         return True
 
     @classmethod
-    def execute(cls, B, operation, opacity, bbox, layer, A=None, mask=None):
+    def execute(cls, operation, opacity, bbox, layer, A=None, B=None, mask=None):
+        if B is None:
+            raise ValueError("SF Merge needs B: connect the background image or EXR.")
         b_rgb, b_a, b_stack, b_name = _rgba(B, layer)
         n, h, w = b_rgb.shape[0], b_rgb.shape[1], b_rgb.shape[2]
         if A is None:  # like Nuke: a missing input is black and transparent
